@@ -24,23 +24,26 @@ export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-41}"
 sim_pid=
 vision_pid=
 cleanup() {
-    if [[ -n "$vision_pid" ]]; then kill -INT "$vision_pid" 2>/dev/null || true; fi
-    if [[ -n "$sim_pid" ]]; then kill -INT "$sim_pid" 2>/dev/null || true; fi
+    local pid
+    for pid in "$vision_pid" "$sim_pid"; do
+        if [[ -n "$pid" ]]; then kill -TERM -- "-$pid" 2>/dev/null || true; fi
+    done
     wait || true
 }
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-ros2 launch robomini_sim sim.launch.py side:="$side" control_mode:=auto ammo_mode:=unlimited \
+setsid ros2 launch robomini_sim sim.launch.py side:="$side" control_mode:=auto ammo_mode:=unlimited \
     auto_advance:=true gui:=false partition:="midterm-$$" \
     > "$out/gazebo.log" 2>&1 &
 sim_pid=$!
 
-ros2 run robomini_vision vision --ros-args -p use_sim_time:=true -p side:="$side" -p enable_fire:=true \
+setsid ros2 run robomini_vision vision --ros-args -p use_sim_time:=true -p side:="$side" -p enable_fire:=true \
     > "$out/vision.log" 2>&1 &
 vision_pid=$!
 
 echo "Recording official Gazebo camera and referee output in $out"
 timeout --signal=INT --kill-after=15s "${ROBOMINI_TIMEOUT:-300s}" ros2 run robomini_vision record \
-    --ros-args -p use_sim_time:=true -p "output_dir:=$out" -p "display:=${ROBOMINI_DISPLAY:-false}"
+    --ros-args -p use_sim_time:=true -p "output_dir:=$out" -p "display:=${ROBOMINI_DISPLAY:-false}" \
+    2>&1 | tee "$out/recorder.log"

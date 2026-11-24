@@ -47,15 +47,15 @@ class Recorder(Node):
 
     def on_hit(self, msg):
         item = {'sim_time_s': seconds(msg.stamp), 'target': int(msg.target),
-                'valid': msg.valid, 'points': msg.score, 'ball': msg.ball}
+                'valid': bool(msg.valid), 'points': int(msg.score), 'ball': msg.ball}
         self.events.append(item)
         self.get_logger().info(json.dumps(item))
 
     def on_score(self, msg):
-        new_hits = list(msg.mode_hits)
+        new_hits = [int(count) for count in msg.mode_hits]
         if self.hits != new_hits:
             self.get_logger().info(f'Official Gazebo hits {dict(zip(MODES, new_hits))}')
-        self.hits, self.shots, self.score = new_hits, msg.balls_fired, msg.total
+        self.hits, self.shots, self.score = new_hits, int(msg.balls_fired), int(msg.total)
         now = self.get_clock().now().nanoseconds * 1e-9
         if min(self.hits) < 5:
             self.first_complete = None
@@ -116,9 +116,11 @@ def main(args=None):
     except KeyboardInterrupt:
         pass
     finally:
-        passed = node.close()
-        node.destroy_node()
-        if rclpy.ok():
-            rclpy.shutdown()
+        try:
+            passed = node.close()
+        finally:
+            node.destroy_node()
+            if rclpy.ok():
+                rclpy.shutdown()
     if not passed:
         sys.exit(1)
